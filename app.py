@@ -185,6 +185,10 @@ def consultar_paciente_endpoint(id_paciente: int):
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
     return {"success": True, "data": paciente}
 
+@app.get("/version")
+def version():
+    return {"version": "cors-fix-v2", "origins": ["http://localhost:5173", "http://localhost:3000", "https://motivakid.onrender.com"]}
+
 # ==========================================
 # Ejecución local
 # ==========================================
