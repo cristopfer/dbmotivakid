@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 # Pool de conexiones (mejor rendimiento que abrir/cerrar por request)
 try:
     if DATABASE_URL:
