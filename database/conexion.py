@@ -7,15 +7,24 @@ load_dotenv()
 
 # Pool de conexiones (mejor rendimiento que abrir/cerrar por request)
 try:
-    connection_pool = pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT"),
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-    )
+    if DATABASE_URL:
+        # Producción (Render): usar la URL interna completa
+        connection_pool = pool.SimpleConnectionPool(
+            minconn=1,
+            maxconn=10,
+            dsn=DATABASE_URL,
+        )
+    else:
+        # Local: usar variables individuales del .env
+        connection_pool = pool.SimpleConnectionPool(
+            minconn=1,
+            maxconn=10,
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+        )
     print("✅ Pool de conexiones creado correctamente")
 except Exception as e:
     print(f"❌ Error al crear el pool de conexiones: {e}")
