@@ -14,6 +14,24 @@ from database.paciente import (
     consultar_paciente, 
 )
 
+from database.especialidad import (
+    registrar_especialidad,
+    actualizar_especialidad,
+    eliminar_especialidad,
+    activar_especialidad,
+    listar_especialidad,
+    consultar_especialidad,
+)
+
+from database.terapeuta import (
+    registrar_terapeuta,
+    actualizar_terapeuta,
+    eliminar_terapeuta,
+    activar_terapeuta,
+    listar_terapeuta,
+    consultar_terapeuta,
+)
+
 app = FastAPI(title="API Centro Terapéutico")
 
 # CORS para permitir que React (Vite/Next) consuma la API
@@ -70,6 +88,43 @@ class PacienteResponse(BaseModel):
     message: str
     id_paciente: int | None = None
 
+# ==========================================
+# Modelos Pydantic — Especialidad
+# ==========================================
+class EspecialidadRegistrarRequest(BaseModel):
+    nombre: str
+
+
+class EspecialidadActualizarRequest(BaseModel):
+    id_especialidad: int
+    nombre: str
+
+
+class EspecialidadResponse(BaseModel):
+    success: bool
+    message: str
+    id_especialidad: int | None = None
+
+# ==========================================
+# Modelos Pydantic — Terapeuta
+# ==========================================
+class TerapeutaRegistrarRequest(BaseModel):
+    nombres: str
+    apellidos: str
+    id_especialidad: int
+
+
+class TerapeutaActualizarRequest(BaseModel):
+    id_terapeuta: int
+    nombres: str
+    apellidos: str
+    id_especialidad: int
+
+
+class TerapeutaResponse(BaseModel):
+    success: bool
+    message: str
+    id_terapeuta: int | None = None
 
 # ==========================================
 # Rutas — Generales
@@ -184,6 +239,171 @@ def consultar_paciente_endpoint(id_paciente: int):
     if paciente is None:
         raise HTTPException(status_code=404, detail="Paciente no encontrado")
     return {"success": True, "data": paciente}
+
+# ==========================================
+# Rutas — Especialidad
+# ==========================================
+@app.post("/especialidades/registrar", response_model=EspecialidadResponse)
+def registrar_especialidad_endpoint(datos: EspecialidadRegistrarRequest):
+    id_especialidad = registrar_especialidad(datos.nombre)
+
+    if id_especialidad == -1:
+        raise HTTPException(status_code=500, detail="No se pudo registrar la especialidad")
+
+    return EspecialidadResponse(
+        success=True,
+        id_especialidad=id_especialidad,
+        message="Especialidad registrada correctamente",
+    )
+
+
+@app.put("/especialidades/actualizar", response_model=EspecialidadResponse)
+def actualizar_especialidad_endpoint(datos: EspecialidadActualizarRequest):
+    resultado = actualizar_especialidad(datos.id_especialidad, datos.nombre)
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al actualizar la especialidad")
+    if resultado == 0:
+        raise HTTPException(status_code=404, detail="Especialidad no encontrada")
+
+    return EspecialidadResponse(
+        success=True,
+        message="Especialidad actualizada correctamente",
+    )
+
+
+@app.delete("/especialidades/eliminar/{id_especialidad}", response_model=EspecialidadResponse)
+def eliminar_especialidad_endpoint(id_especialidad: int):
+    resultado = eliminar_especialidad(id_especialidad)
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al eliminar la especialidad")
+    if resultado == 0:
+        raise HTTPException(status_code=404, detail="Especialidad no encontrada")
+
+    return EspecialidadResponse(
+        success=True,
+        message="Especialidad eliminada (estado = FALSE) correctamente",
+    )
+
+
+@app.put("/especialidades/activar/{id_especialidad}", response_model=EspecialidadResponse)
+def activar_especialidad_endpoint(id_especialidad: int):
+    resultado = activar_especialidad(id_especialidad)
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al activar la especialidad")
+    if resultado == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Especialidad no encontrada o ya está activa",
+        )
+
+    return EspecialidadResponse(
+        success=True,
+        message="Especialidad activada (estado = TRUE) correctamente",
+    )
+
+
+@app.get("/especialidades")
+def listar_especialidad_endpoint():
+    resultados = listar_especialidad()
+    return {"success": True, "data": resultados}
+
+
+@app.get("/especialidades/{id_especialidad}")
+def consultar_especialidad_endpoint(id_especialidad: int):
+    especialidad = consultar_especialidad(id_especialidad)
+    if especialidad is None:
+        raise HTTPException(status_code=404, detail="Especialidad no encontrada")
+    return {"success": True, "data": especialidad}
+
+# ==========================================
+# Rutas — Terapeuta
+# ==========================================
+@app.post("/terapeutas/registrar", response_model=TerapeutaResponse)
+def registrar_terapeuta_endpoint(datos: TerapeutaRegistrarRequest):
+    id_terapeuta = registrar_terapeuta(
+        datos.nombres,
+        datos.apellidos,
+        datos.id_especialidad,
+    )
+
+    if id_terapeuta == -1:
+        raise HTTPException(status_code=500, detail="No se pudo registrar el terapeuta")
+
+    return TerapeutaResponse(
+        success=True,
+        id_terapeuta=id_terapeuta,
+        message="Terapeuta registrado correctamente",
+    )
+
+
+@app.put("/terapeutas/actualizar", response_model=TerapeutaResponse)
+def actualizar_terapeuta_endpoint(datos: TerapeutaActualizarRequest):
+    resultado = actualizar_terapeuta(
+        datos.id_terapeuta,
+        datos.nombres,
+        datos.apellidos,
+        datos.id_especialidad,
+    )
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al actualizar el terapeuta")
+    if resultado == 0:
+        raise HTTPException(status_code=404, detail="Terapeuta no encontrado")
+
+    return TerapeutaResponse(
+        success=True,
+        message="Terapeuta actualizado correctamente",
+    )
+
+
+@app.delete("/terapeutas/eliminar/{id_terapeuta}", response_model=TerapeutaResponse)
+def eliminar_terapeuta_endpoint(id_terapeuta: int):
+    resultado = eliminar_terapeuta(id_terapeuta)
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al eliminar el terapeuta")
+    if resultado == 0:
+        raise HTTPException(status_code=404, detail="Terapeuta no encontrado")
+
+    return TerapeutaResponse(
+        success=True,
+        message="Terapeuta eliminado (estado = FALSE) correctamente",
+    )
+
+
+@app.put("/terapeutas/activar/{id_terapeuta}", response_model=TerapeutaResponse)
+def activar_terapeuta_endpoint(id_terapeuta: int):
+    resultado = activar_terapeuta(id_terapeuta)
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al activar el terapeuta")
+    if resultado == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Terapeuta no encontrado o ya está activo",
+        )
+
+    return TerapeutaResponse(
+        success=True,
+        message="Terapeuta activado (estado = TRUE) correctamente",
+    )
+
+
+@app.get("/terapeutas")
+def listar_terapeuta_endpoint():
+    resultados = listar_terapeuta()
+    return {"success": True, "data": resultados}
+
+
+@app.get("/terapeutas/{id_terapeuta}")
+def consultar_terapeuta_endpoint(id_terapeuta: int):
+    terapeuta = consultar_terapeuta(id_terapeuta)
+    if terapeuta is None:
+        raise HTTPException(status_code=404, detail="Terapeuta no encontrado")
+    return {"success": True, "data": terapeuta}
 
 @app.get("/version")
 def version():
