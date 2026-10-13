@@ -32,6 +32,14 @@ from database.terapeuta import (
     consultar_terapeuta,
 )
 
+from database.disponibilidad import (
+    registrar_disponibilidad,
+    actualizar_disponibilidad,
+    consultar_disponibilidad,
+)
+
+from database.horarios import horarios_terapeuta_paciente
+
 app = FastAPI(title="API Centro Terapéutico")
 
 # CORS para permitir que React (Vite/Next) consuma la API
@@ -125,6 +133,30 @@ class TerapeutaResponse(BaseModel):
     success: bool
     message: str
     id_terapeuta: int | None = None
+
+# ==========================================
+# Modelos Pydantic — Disponibilidad
+# ==========================================
+class BloqueDisponibilidad(BaseModel):
+    dia_semana: str          # "Lunes", "Martes", ...
+    hora_inicio: str         # "08:00"
+    hora_fin: str            # "08:40"
+
+
+class DisponibilidadRegistrarRequest(BaseModel):
+    id_terapeuta: int
+    bloques: list[BloqueDisponibilidad]
+
+
+class DisponibilidadActualizarRequest(BaseModel):
+    id_terapeuta: int
+    bloques: list[BloqueDisponibilidad]
+
+
+class DisponibilidadResponse(BaseModel):
+    success: bool
+    message: str
+    bloques_afectados: int | None = None
 
 # ==========================================
 # Rutas — Generales
@@ -404,6 +436,67 @@ def consultar_terapeuta_endpoint(id_terapeuta: int):
     if terapeuta is None:
         raise HTTPException(status_code=404, detail="Terapeuta no encontrado")
     return {"success": True, "data": terapeuta}
+
+# ==========================================
+# Rutas — Disponibilidad
+# ==========================================
+@app.post("/disponibilidad/registrar", response_model=DisponibilidadResponse)
+def registrar_disponibilidad_endpoint(datos: DisponibilidadRegistrarRequest):
+    bloques = [b.model_dump() for b in datos.bloques]
+    resultado = registrar_disponibilidad(datos.id_terapeuta, bloques)
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="No se pudo registrar la disponibilidad")
+
+    return DisponibilidadResponse(
+        success=True,
+        bloques_afectados=resultado,
+        message=f"{resultado} bloque(s) de disponibilidad registrado(s) correctamente",
+    )
+
+
+@app.put("/disponibilidad/actualizar", response_model=DisponibilidadResponse)
+def actualizar_disponibilidad_endpoint(datos: DisponibilidadActualizarRequest):
+    bloques = [b.model_dump() for b in datos.bloques]
+    resultado = actualizar_disponibilidad(datos.id_terapeuta, bloques)
+
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="No se pudo actualizar la disponibilidad")
+
+    return DisponibilidadResponse(
+        success=True,
+        bloques_afectados=resultado,
+        message=f"{resultado} bloque(s) de disponibilidad actualizado(s) correctamente",
+    )
+
+
+@app.get("/disponibilidad/{id_terapeuta}")
+def consultar_disponibilidad_endpoint(id_terapeuta: int):
+    bloques = consultar_disponibilidad(id_terapeuta)
+    return {"success": True, "data": bloques}
+
+# ==========================================
+# Rutas — Horarios
+# ==========================================
+@app.get("/horarios/terapeuta/{id_terapeuta}")
+def horarios_terapeuta_paciente_endpoint(
+    id_terapeuta: int,
+    fecha_lunes: date,
+    fecha_domingo: date,
+):
+    if fecha_lunes > fecha_domingo:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha del lunes no puede ser mayor que la del domingo",
+        )
+
+    resultados = horarios_terapeuta_paciente(
+        id_terapeuta,
+        fecha_lunes.isoformat(),
+        fecha_domingo.isoformat(),
+    )
+
+    return {"success": True, "data": resultados}
 
 @app.get("/version")
 def version():
