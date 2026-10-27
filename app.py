@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +39,8 @@ from database.disponibilidad import (
 )
 
 from database.horarios import horarios_terapeuta_paciente
+from database.cita import agendar_cita, cita_disponibilidad_terapeuta, reservar_cita
+from database.asistencia import asistencia_hoy, control_asistencia
 
 app = FastAPI(title="API Centro Terapéutico")
 
@@ -157,6 +159,35 @@ class DisponibilidadResponse(BaseModel):
     success: bool
     message: str
     bloques_afectados: int | None = None
+
+# ==========================================
+# Modelos Pydantic — Cita
+# ==========================================
+class CitaAgendarRequest(BaseModel):
+    id_paciente: int
+    id_terapeuta: int
+    fecha: date
+    hora_inicio: time
+    hora_fin: time
+
+
+class CitaResponse(BaseModel):
+    success: bool
+    message: str
+    id_cita: int | None = None
+
+# ==========================================
+# Modelos Pydantic — Asistencia
+# ==========================================
+class AsistenciaControlRequest(BaseModel):
+    id_cita: int
+    estado: str               # 'Asistió' o 'Faltó'
+
+
+class AsistenciaResponse(BaseModel):
+    success: bool
+    message: str
+    id_asistencia: int | None = None
 
 # ==========================================
 # Rutas — Generales
@@ -497,6 +528,93 @@ def horarios_terapeuta_paciente_endpoint(
     )
 
     return {"success": True, "data": resultados}
+
+# ==========================================
+# Rutas — Cita
+# ==========================================
+@app.post("/citas/agendar", response_model=CitaResponse)
+def agendar_cita_endpoint(datos: CitaAgendarRequest):
+    id_cita = agendar_cita(
+        datos.id_paciente,
+        datos.id_terapeuta,
+        datos.fecha.isoformat(),
+        datos.hora_inicio.strftime("%H:%M"),
+        datos.hora_fin.strftime("%H:%M"),
+    )
+
+    if id_cita == -1:
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo agendar la cita. Verifica los datos e inténtalo de nuevo."
+        )
+
+    return CitaResponse(
+        success=True,
+        id_cita=id_cita,
+        message="Cita agendada (estado = Reservada) correctamente",
+    )
+
+# ==========================================
+# Rutas — Cita (Disponibilidad)
+# ==========================================
+@app.get("/citas/disponibilidad/{id_terapeuta}")
+def cita_disponibilidad_terapeuta_endpoint(
+    id_terapeuta: int,
+    fecha: date,
+):
+    resultados = cita_disponibilidad_terapeuta(id_terapeuta, fecha.isoformat())
+    return {"success": True, "data": resultados}
+
+# ==========================================
+# Rutas — Cita (Cancelar/Liberar)
+# ==========================================
+@app.delete("/citas/reservar/{id_cita}", response_model=CitaResponse)
+def reservar_cita_endpoint(id_cita: int):
+    resultado = reservar_cita(id_cita)
+
+    if resultado == -1:
+        raise HTTPException(
+            status_code=500,
+            detail="Error al intentar liberar la cita."
+        )
+    if resultado == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Cita no encontrada o ya estaba cancelada."
+        )
+
+    return CitaResponse(
+        success=True,
+        message="Cita liberada (estado = Cancelada) correctamente",
+    )
+
+# ==========================================
+# Rutas — Asistencia
+# ==========================================
+@app.get("/asistencia/hoy/{id_terapeuta}")
+def asistencia_hoy_endpoint(id_terapeuta: int):
+    # Ya no recibimos 'fecha' por parámetro
+    resultados = asistencia_hoy(id_terapeuta)
+    return {"success": True, "data": resultados}
+
+@app.post("/asistencia/control", response_model=AsistenciaResponse)
+def control_asistencia_endpoint(datos: AsistenciaControlRequest):
+    id_asistencia = control_asistencia(
+        datos.id_cita,
+        datos.estado
+    )
+
+    if id_asistencia == -1:
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo registrar la asistencia. Verifica el estado o el id de la cita."
+        )
+
+    return AsistenciaResponse(
+        success=True,
+        id_asistencia=id_asistencia,
+        message="Asistencia registrada correctamente",
+    )
 
 @app.get("/version")
 def version():
