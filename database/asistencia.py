@@ -23,7 +23,7 @@ def asistencia_hoy(id_terapeuta: int) -> list[dict]:
         if conn:
             release_connection(conn)
 
-def control_asistencia(id_cita: int, estado: str) -> int:
+def control_asistencia(id_terapeuta: int, estado: str) -> int:
     """
     Llama a sp_control_asistencia en PostgreSQL.
     Retorna el id_asistencia generado, o -1 si hubo error.
@@ -34,7 +34,7 @@ def control_asistencia(id_cita: int, estado: str) -> int:
         with conn.cursor() as cursor:
             cursor.execute(
                 "SELECT sp_control_asistencia(%s, %s);",
-                (id_cita, estado)
+                (id_terapeuta, estado)
             )
             id_asistencia = cursor.fetchone()[0]
             conn.commit()

@@ -180,7 +180,7 @@ class CitaResponse(BaseModel):
 # Modelos Pydantic — Asistencia
 # ==========================================
 class AsistenciaControlRequest(BaseModel):
-    id_cita: int
+    id_terapeuta: int
     estado: str               # 'Asistió' o 'Faltó'
 
 
@@ -600,7 +600,7 @@ def asistencia_hoy_endpoint(id_terapeuta: int):
 @app.post("/asistencia/control", response_model=AsistenciaResponse)
 def control_asistencia_endpoint(datos: AsistenciaControlRequest):
     id_asistencia = control_asistencia(
-        datos.id_cita,
+        datos.id_terapeuta,
         datos.estado
     )
 
