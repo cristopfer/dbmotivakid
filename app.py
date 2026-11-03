@@ -41,6 +41,20 @@ from database.disponibilidad import (
 from database.horarios import horarios_terapeuta_paciente
 from database.cita import agendar_cita, cita_disponibilidad_terapeuta, reservar_cita
 from database.asistencia import asistencia_hoy, control_asistencia
+from typing import Optional
+from database.pago_paciente import (
+    actualizar_registro_pago_paciente, 
+    guardar_pago,
+    lista_pagos_pacientes
+)
+
+from database.pago_terapeuta import (
+    listar_terapeutas_mes,
+    generar_control_pago_terapeutas,
+    guardar_pagos_terapeutas
+)
+
+from database.reporte import reporte_pacientes, reporte_terapeutas, datos_estadisticos
 
 app = FastAPI(title="API Centro Terapéutico")
 
@@ -188,6 +202,43 @@ class AsistenciaResponse(BaseModel):
     success: bool
     message: str
     id_asistencia: int | None = None
+
+# ==========================================
+# Modelos Pydantic — Pago Paciente
+# ==========================================
+class PagoPacienteUpdateResponse(BaseModel):
+    success: bool
+    message: str
+    pagos_generados: int
+
+# ==========================================
+# Modelos Pydantic — Pago Paciente
+# ==========================================
+class PagoGuardarRequest(BaseModel):
+    id_pago_paciente: int
+    monto: float
+    forma_pago: str  # 'Efectivo', 'Tarjeta', 'Transferencia', 'Yape', 'Plin'
+    fecha_pago: date
+
+# ==========================================
+# Modelos Pydantic — Pago Terapeuta
+# ==========================================
+class GenerarControlRequest(BaseModel):
+    periodo: str  # 'YYYY-MM'
+
+class GuardarPagoTerapeutaRequest(BaseModel):
+    id_pago_terapeuta: int
+    id_terapeuta: int
+    periodo: str
+    modalidad_pago: str  # 'Mensual' o 'Horaria'
+    monto_base: float
+    descuento: float
+    fecha_pago: date
+
+class PagoTerapeutaResponse(BaseModel):
+    success: bool
+    message: str
+    registros_afectados: int | None = None
 
 # ==========================================
 # Rutas — Generales
@@ -615,6 +666,139 @@ def control_asistencia_endpoint(datos: AsistenciaControlRequest):
         id_asistencia=id_asistencia,
         message="Asistencia registrada correctamente",
     )
+
+# ==========================================
+# Rutas — Pago Paciente
+# ==========================================
+@app.post("/pagos/pacientes/actualizar", response_model=PagoPacienteUpdateResponse)
+def actualizar_pagos_endpoint():
+    pagos_generados = actualizar_registro_pago_paciente()
+
+    if pagos_generados == -1:
+        raise HTTPException(
+            status_code=500,
+            detail="Error al generar los registros de pago de pacientes."
+        )
+
+    if pagos_generados == 0:
+        return PagoPacienteUpdateResponse(
+            success=True,
+            message="No hay citas nuevas pendientes de generar pago.",
+            pagos_generados=0
+        )
+
+    return PagoPacienteUpdateResponse(
+        success=True,
+        message=f"Se generaron {pagos_generados} registros de pago correctamente.",
+        pagos_generados=pagos_generados
+    )
+
+# ==========================================
+# Rutas — Pago Paciente
+# ==========================================
+@app.put("/pagos/pacientes/guardar", response_model=PagoPacienteUpdateResponse)
+def guardar_pago_endpoint(datos: PagoGuardarRequest):
+    resultado = guardar_pago(
+        datos.id_pago_paciente,
+        datos.monto,
+        datos.forma_pago,
+        datos.fecha_pago.isoformat()
+    )
+
+    if resultado == -1:
+        raise HTTPException(
+            status_code=500,
+            detail="Error interno al guardar el pago. Verifica los datos."
+        )
+    if resultado == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="El registro de pago no fue encontrado."
+        )
+
+    return PagoPacienteUpdateResponse(
+        success=True,
+        message="Pago guardado y registrado como 'Pagado' correctamente.",
+        pagos_generados=1 # Mantenemos la estructura del modelo anterior
+    )
+
+# ==========================================
+# Rutas — Pago Paciente (Listar)
+# ==========================================
+@app.get("/pagos/pacientes")
+def lista_pagos_pacientes_endpoint(
+    id_paciente: Optional[int] = None,
+    estado: Optional[str] = None,
+    forma_pago: Optional[str] = None
+):
+    # Al definirlos como Optional, FastAPI entiende que son parámetros de consulta (Query Params)
+    resultados = lista_pagos_pacientes(id_paciente, estado, forma_pago)
+    return {"success": True, "data": resultados}
+
+# ==========================================
+# Rutas — Pago Terapeuta
+# ==========================================
+@app.get("/pagos/terapeutas")
+def listar_terapeutas_mes_endpoint(
+    periodo: Optional[str] = None,
+    id_terapeuta: Optional[int] = None
+):
+    resultados = listar_terapeutas_mes(periodo, id_terapeuta)
+    return {"success": True, "data": resultados}
+
+@app.post("/pagos/terapeutas/generar", response_model=PagoTerapeutaResponse)
+def generar_control_pago_terapeutas_endpoint(datos: GenerarControlRequest):
+    resultado = generar_control_pago_terapeutas(datos.periodo)
+    
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al generar los controles de pago.")
+        
+    return PagoTerapeutaResponse(
+        success=True,
+        message=f"Se generaron {resultado} registros de pago para el periodo {datos.periodo}.",
+        registros_afectados=resultado
+    )
+
+@app.put("/pagos/terapeutas/guardar", response_model=PagoTerapeutaResponse)
+def guardar_pagos_terapeutas_endpoint(datos: GuardarPagoTerapeutaRequest):
+    resultado = guardar_pagos_terapeutas(
+        datos.id_pago_terapeuta,
+        datos.id_terapeuta,
+        datos.periodo,
+        datos.modalidad_pago,
+        datos.monto_base,
+        datos.descuento,
+        datos.fecha_pago.isoformat()
+    )
+    
+    if resultado == -1:
+        raise HTTPException(status_code=500, detail="Error al guardar el pago del terapeuta.")
+    if resultado == 0:
+        raise HTTPException(status_code=404, detail="Registro de pago no encontrado.")
+        
+    return PagoTerapeutaResponse(
+        success=True,
+        message="Pago del terapeuta guardado y calculado correctamente.",
+        registros_afectados=1
+    )
+
+# ==========================================
+# Rutas — Reportes
+# ==========================================
+@app.get("/reportes/pacientes/{id_paciente}")
+def reporte_pacientes_endpoint(id_paciente: int):
+    resultados = reporte_pacientes(id_paciente)
+    return {"success": True, "data": resultados}
+
+@app.get("/reportes/terapeutas/{id_terapeuta}")
+def reporte_terapeutas_endpoint(id_terapeuta: int):
+    resultados = reporte_terapeutas(id_terapeuta)
+    return {"success": True, "data": resultados}
+
+@app.get("/reportes/estadisticas")
+def datos_estadisticos_endpoint():
+    resultados = datos_estadisticos()
+    return {"success": True, "data": resultados}
 
 @app.get("/version")
 def version():
