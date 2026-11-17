@@ -55,6 +55,8 @@ from database.pago_terapeuta import (
 )
 
 from database.reporte import reporte_pacientes, reporte_terapeutas, datos_estadisticos
+from modelo import predecir as predecir_citas, modelo_disponible, info_modelo
+from database.predecir import demanda_agregada
 
 app = FastAPI(title="API Centro Terapéutico")
 
@@ -239,6 +241,26 @@ class PagoTerapeutaResponse(BaseModel):
     success: bool
     message: str
     registros_afectados: int | None = None
+
+# ==========================================
+# Modelos Pydantic — Predicción
+# ==========================================
+class PrediccionRequest(BaseModel):
+    fecha: date
+    especialidad: str                          # "Lenguaje" o "Psicología"
+    citas_dia_anterior: float = 0.0
+    citas_semana_anterior: float = 0.0
+    promedio_7_dias: float = 0.0
+    promedio_30_dias: float = 0.0
+
+
+class PrediccionResponse(BaseModel):
+    success: bool
+    message: str
+    prediccion_total_citas: float | None = None
+    fecha: str | None = None
+    especialidad: str | None = None
+    features_usadas: dict | None = None
 
 # ==========================================
 # Rutas — Generales
@@ -799,6 +821,89 @@ def reporte_terapeutas_endpoint(id_terapeuta: int):
 def datos_estadisticos_endpoint():
     resultados = datos_estadisticos()
     return {"success": True, "data": resultados}
+
+# ==========================================
+# Rutas — Predicción (ML)
+# ==========================================
+@app.get("/prediccion/info")
+def prediccion_info_endpoint():
+    return {"success": True, "data": info_modelo()}
+
+
+@app.post("/prediccion/citas", response_model=PrediccionResponse)
+def predecir_citas_endpoint(datos: PrediccionRequest):
+    if not modelo_disponible():
+        raise HTTPException(
+            status_code=503,
+            detail="El modelo de predicción no está disponible en el servidor."
+        )
+
+    especialidad = datos.especialidad.strip().capitalize()
+    if especialidad not in ("Lenguaje", "Psicología"):
+        raise HTTPException(
+            status_code=400,
+            detail="Especialidad inválida. Debe ser 'Lenguaje' o 'Psicología'."
+        )
+
+    try:
+        resultado = predecir_citas(
+            fecha=datos.fecha,
+            especialidad=especialidad,
+            citas_dia_anterior=datos.citas_dia_anterior,
+            citas_semana_anterior=datos.citas_semana_anterior,
+            promedio_7_dias=datos.promedio_7_dias,
+            promedio_30_dias=datos.promedio_30_dias,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al predecir: {e}")
+
+    return PrediccionResponse(
+        success=True,
+        message="Predicción generada correctamente",
+        prediccion_total_citas=resultado["prediccion_total_citas"],
+        fecha=resultado["fecha"],
+        especialidad=resultado["especialidad"],
+        features_usadas=resultado["features_usadas"],
+    )
+
+@app.get("/prediccion/citas-test")
+def predecir_citas_test(
+    fecha: date,
+    especialidad: str,
+    citas_dia_anterior: float = 0.0,
+    citas_semana_anterior: float = 0.0,
+    promedio_7_dias: float = 0.0,
+    promedio_30_dias: float = 0.0,
+):
+    if not modelo_disponible():
+        raise HTTPException(status_code=503, detail="Modelo no disponible")
+    esp = especialidad.strip().capitalize()
+    if esp not in ("Lenguaje", "Psicología"):
+        raise HTTPException(status_code=400, detail="Especialidad inválida")
+    resultado = predecir_citas(
+        fecha=fecha,
+        especialidad=esp,
+        citas_dia_anterior=citas_dia_anterior,
+        citas_semana_anterior=citas_semana_anterior,
+        promedio_7_dias=promedio_7_dias,
+        promedio_30_dias=promedio_30_dias,
+    )
+    return {"success": True, "data": resultado}
+
+@app.get("/prediccion/demanda")
+def prediccion_demanda_endpoint(
+    fecha_desde: date,
+    fecha_hasta: date,
+    id_especialidad: Optional[int] = None,
+    id_terapeuta: Optional[int] = None,
+):
+    try:
+        data = demanda_agregada(
+            fecha_desde, fecha_hasta, id_especialidad, id_terapeuta
+        )
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en predicción: {e}")
 
 @app.get("/version")
 def version():
